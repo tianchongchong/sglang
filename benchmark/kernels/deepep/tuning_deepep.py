@@ -463,6 +463,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--num-sms", type=int, default=24)
     parser.add_argument("--output-path", type=str, default="deepep_tuned.json")
+    
     parser.add_argument("--nnodes", type=int, default=1)
     parser.add_argument("--node-rank", type=int, default=0)
     parser.add_argument("--master-addr", type=str, default="127.0.0.1")
