@@ -13,7 +13,6 @@
 # ==============================================================================
 
 import multiprocessing as mp
-import os
 import random
 import unittest
 from typing import List
@@ -21,7 +20,7 @@ from typing import List
 from utils import TORCH_DTYPES, LoRAAdaptor, LoRAModelCase, ensure_reproducibility
 
 from sglang.test.runners import HFRunner, SRTRunner
-from sglang.test.test_utils import CustomTestCase, calculate_rouge_l, is_in_ci
+from sglang.test.test_utils import CustomTestCase, calculate_rouge_l
 
 LORA_MODELS_QWEN3 = [
     LoRAModelCase(
@@ -67,7 +66,9 @@ TEST_MULTIPLE_BATCH_PROMPTS = [
 
 
 class TestLoRAQwen3(CustomTestCase):
-    def _run_lora_multiple_batch_on_model_cases(self, model_cases: List[LoRAModelCase]):
+    def _run_lora_multiple_batch_on_model_cases(
+        self, model_cases: List[LoRAModelCase], use_spec_decoding
+    ):
         for model_case in model_cases:
             for torch_dtype in TORCH_DTYPES:
                 max_new_tokens = 32
@@ -139,7 +140,11 @@ class TestLoRAQwen3(CustomTestCase):
                     lora_paths=[lora_adapter_paths[0], lora_adapter_paths[1]],
                     max_loras_per_batch=len(lora_adapter_paths) + 1,
                     sleep_on_idle=True,  # Eliminate non-determinism by forcing all requests to be processed in one batch.
-                    attention_backend="torch_native",
+                    # attention_backend="torch_native",
+                    speculative_algorithm="NGRAM",
+                    speculative_num_draft_tokens=5,
+                    speculative_ngram_min_match_window_size=2,
+                    speculative_ngram_max_match_window_size=15,
                 )
 
                 ensure_reproducibility()
@@ -186,19 +191,15 @@ class TestLoRAQwen3(CustomTestCase):
 
                         print(f"--- Batch {i+1} Comparison Passed --- ")
 
-    def test_ci_lora_models(self):
-        self._run_lora_multiple_batch_on_model_cases(LORA_MODELS_QWEN3)
+    def test_ci_lora_models_basic(self):
+        self._run_lora_multiple_batch_on_model_cases(
+            LORA_MODELS_QWEN3, use_spec_decoding=False
+        )
 
-    def test_all_lora_models(self):
-        if is_in_ci():
-            return
-        qwen_filtered_models = []
-        for model_case in LORA_MODELS_QWEN3:
-            if "ONLY_RUN" in os.environ and os.environ["ONLY_RUN"] != model_case.base:
-                continue
-            qwen_filtered_models.append(model_case)
-
-        self._run_lora_multiple_batch_on_model_cases(qwen_filtered_models)
+    def test_ci_lora_models_spec_decoding(self):
+        self._run_lora_multiple_batch_on_model_cases(
+            LORA_MODELS_QWEN3, use_spec_decoding=True
+        )
 
 
 if __name__ == "__main__":
