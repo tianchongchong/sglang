@@ -77,7 +77,9 @@ class TestLoRA(CustomTestCase):
 
         return batches
 
-    def _run_lora_multiple_batch_on_model_cases(self, model_cases: List[LoRAModelCase]):
+    def _run_lora_multiple_batch_on_model_cases(
+        self, model_cases: List[LoRAModelCase], use_spec_decoding: bool
+    ):
         for model_case in model_cases:
             for torch_dtype in TORCH_DTYPES:
                 max_new_tokens = 32
@@ -90,14 +92,24 @@ class TestLoRA(CustomTestCase):
                 )
 
                 # Initialize runners
+                spec_args = (
+                    {}
+                    if not use_spec_decoding
+                    else {
+                        "speculative_algorithm": "NGRAM",
+                        "speculative_num_draft_tokens": 5,
+                        "speculative_ngram_min_match_window_size": 2,
+                        "speculative_ngram_max_match_window_size": 15,
+                    }
+                )
                 srt_runner = SRTRunner(
                     base_path,
                     torch_dtype=torch_dtype,
                     model_type="generation",
                     lora_paths=[lora_adapter_paths[0], lora_adapter_paths[1]],
                     max_loras_per_batch=len(lora_adapter_paths) + 1,
-                    sleep_on_idle=True,  # Eliminate non-determinism by forcing all requests to be processed in one batch.
-                    attention_backend="torch_native",
+                    enable_deterministic_inference=True,
+                    **spec_args,
                 )
                 hf_runner = HFRunner(
                     base_path, torch_dtype=torch_dtype, model_type="generation"
@@ -145,20 +157,31 @@ class TestLoRA(CustomTestCase):
 
                         print(f"--- Batch {i} Comparison Passed --- ")
 
-    def test_ci_lora_models(self):
-        self._run_lora_multiple_batch_on_model_cases(CI_MULTI_LORA_MODELS)
-
-    def test_all_lora_models(self):
+    def _get_test_models(self):
         if is_in_ci():
-            return
+            return CI_MULTI_LORA_MODELS
+        else:
+            filtered_models = []
+            for model_case in ALL_OTHER_MULTI_LORA_MODELS:
+                if (
+                    "ONLY_RUN" in os.environ
+                    and os.environ["ONLY_RUN"] != model_case.base
+                ):
+                    continue
+                filtered_models.append(model_case)
+            return filtered_models
 
-        filtered_models = []
-        for model_case in ALL_OTHER_MULTI_LORA_MODELS:
-            if "ONLY_RUN" in os.environ and os.environ["ONLY_RUN"] != model_case.base:
-                continue
-            filtered_models.append(model_case)
+    def test_lora_models(self):
+        test_models = self._get_test_models()
+        self._run_lora_multiple_batch_on_model_cases(
+            test_models, use_spec_decoding=False
+        )
 
-        self._run_lora_multiple_batch_on_model_cases(filtered_models)
+    def test_lora_models_spec_decoding(self):
+        test_models = self._get_test_models()
+        self._run_lora_multiple_batch_on_model_cases(
+            test_models, use_spec_decoding=True
+        )
 
 
 if __name__ == "__main__":

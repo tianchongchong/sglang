@@ -67,7 +67,7 @@ TEST_MULTIPLE_BATCH_PROMPTS = [
 
 class TestLoRAQwen3(CustomTestCase):
     def _run_lora_multiple_batch_on_model_cases(
-        self, model_cases: List[LoRAModelCase], use_spec_decoding
+        self, model_cases: List[LoRAModelCase], use_spec_decoding: bool
     ):
         for model_case in model_cases:
             for torch_dtype in TORCH_DTYPES:
@@ -133,18 +133,24 @@ class TestLoRAQwen3(CustomTestCase):
 
                 # Initialize runners
                 ensure_reproducibility()
+                spec_args = (
+                    {}
+                    if not use_spec_decoding
+                    else {
+                        "speculative_algorithm": "NGRAM",
+                        "speculative_num_draft_tokens": 5,
+                        "speculative_ngram_min_match_window_size": 2,
+                        "speculative_ngram_max_match_window_size": 15,
+                    }
+                )
                 srt_runner = SRTRunner(
                     base_path,
                     torch_dtype=torch_dtype,
                     model_type="generation",
                     lora_paths=[lora_adapter_paths[0], lora_adapter_paths[1]],
                     max_loras_per_batch=len(lora_adapter_paths) + 1,
-                    sleep_on_idle=True,  # Eliminate non-determinism by forcing all requests to be processed in one batch.
-                    # attention_backend="torch_native",
-                    speculative_algorithm="NGRAM",
-                    speculative_num_draft_tokens=5,
-                    speculative_ngram_min_match_window_size=2,
-                    speculative_ngram_max_match_window_size=15,
+                    enable_deterministic_inference=True,
+                    **spec_args,
                 )
 
                 ensure_reproducibility()
