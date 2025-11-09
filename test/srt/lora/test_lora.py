@@ -108,11 +108,16 @@ class TestLoRA(CustomTestCase):
                     model_type="generation",
                     lora_paths=[lora_adapter_paths[0], lora_adapter_paths[1]],
                     max_loras_per_batch=len(lora_adapter_paths) + 1,
+                    sleep_on_idle=True,  # Eliminate non-determinism by forcing all requests to be processed in one batch.
                     enable_deterministic_inference=True,
+                    disable_cuda_graph=True,
                     **spec_args,
                 )
                 hf_runner = HFRunner(
-                    base_path, torch_dtype=torch_dtype, model_type="generation"
+                    base_path,
+                    torch_dtype=torch_dtype,
+                    model_type="generation",
+                    patch_model_do_sample_false=True,
                 )
 
                 batches = self._create_test_samples(lora_adapter_paths)
